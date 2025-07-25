@@ -2,7 +2,7 @@ import express from "express"
 import dotenv from "dotenv"
 import session from "express-session"
 import passport from "passport"
-import { Strategy as GoogleStrategy } from 'passport-google-oauth20'
+import { Strategy as GoogleStrategy } from "passport-google-oauth20"
 
 dotenv.config()
 
@@ -14,6 +14,15 @@ app.use(
     saveUninitialized: true,
   })
 )
+
+if (process.env.NODE_ENV === "production") {
+  app.use((req, res, next) => {
+    if (req.header("x-forwarded-proto") !== "https") {
+      req.protocol = "https"
+    }
+    next()
+  })
+}
 
 app.use(passport.initialize())
 app.use(passport.session())
@@ -31,7 +40,10 @@ passport.use(
     {
       clientID: process.env.GOOGLE_CLIENT_ID,
       clientSecret: process.env.GOOGLE_CLIENT_SECRET,
-      callbackURL: "/auth/google/callback",
+      callbackURL:
+        process.env.NODE_ENV === "production"
+          ? "https://google-auth-express-production.up.railway.app/auth/google/callback"
+          : "http://localhost:3000/auth/google/callback",
     },
     (accessToken, refreshToken, profile, done) => {
       return done(null, profile)
@@ -41,6 +53,15 @@ passport.use(
 
 app.get(
   "/auth/google",
+  (req, res, next) => {
+    console.log("Request host:", req.get("host"))
+    console.log("Request protocol:", req.protocol)
+    console.log(
+      "Full URL:",
+      `${req.protocol}://${req.get("host")}${req.originalUrl}`
+    )
+    next()
+  },
   passport.authenticate("google", {
     scope: ["profile", "email"],
   })
@@ -60,7 +81,7 @@ app.get("/blank", (req, res) => {
   res.send("<html><body></body></html>")
 })
 
-app.get('/', (req, res) => {
+app.get("/", (req, res) => {
   res.send(`
     <html>
       <head>
@@ -69,8 +90,8 @@ app.get('/', (req, res) => {
             height: 100%;
             margin: 0;
             display: flex;
-            justify-content: center;  /* centers horizontally */
-            align-items: center;      /* centers vertically */
+            justify-content: center;
+            align-items: center;
             font-family: Arial, sans-serif;
             background-color: #f5f5f5;
           }
@@ -97,9 +118,8 @@ app.get('/', (req, res) => {
         <a class="google-btn" href="/auth/google">Sign in with Google</a>
       </body>
     </html>
-  `);
-});
-
+  `)
+})
 
 const PORT = process.env.PORT || 3000
 app.listen(PORT, () => {
